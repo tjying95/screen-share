@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <title>Speaker</title>
+</head>
+
+<body>
+    <audio id="remoteAudio" autoplay></audio>
+    <main class="container">
+        <div class="grid">
+            <button id="playButton" style="display: none">
+                Play Audio
+            </button>
+        </div>
+    </main>
+
+    <script type="module">
+        import { joinRoom } from "https://cdn.jsdelivr.net/npm/trystero/src/nostr.js/+esm";
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const app = urlParams.get("app") || "0940d6b0-3531-4140-aa5c-5a0879dab19d";
+        const password = urlParams.get("password") || "2f9659f8-e25e-439f-ad48-2a79658fa10a";
+        const name = urlParams.get("name") || "default";
+
+        const config = {
+            appId: app,
+            password: password,
+        };
+        const room = joinRoom(config, `${name}-audio`);
+        const [sendMessage, getMessage] = room.makeAction("message");
+
+        const remoteAudio = document.getElementById("remoteAudio");
+        const playButton = document.getElementById("playButton");
+
+        room.onPeerStream((stream, peerId) => {
+            console.log("Audio stream received from peer:", peerId);
+            remoteAudio.srcObject = stream;
+            remoteAudio
+                .play()
+                .then(() => {
+                    remoteAudio.style.display = "block";
+                    playButton.style.display = "none";
+                })
+                .catch(() => {
+                    remoteAudio.style.display = "none";
+                    playButton.style.display = "block";
+                });
+        });
+
+        playButton.addEventListener("click", () => {
+            remoteAudio
+                .play()
+                .then(() => {
+                    remoteAudio.style.display = "block";
+                    playButton.style.display = "none";
+                })
+                .catch(() => {
+                    remoteAudio.style.display = "none";
+                    playButton.style.display = "block";
+                });
+        });
+
+        getMessage((message, peerId) => {
+            if (message === "stop" || message === "stopAudio") {
+                console.log("Stopping audio...");
+                remoteAudio.srcObject = null;
+            }
+        });
+    </script>
+</body>
+
+</html>

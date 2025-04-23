@@ -56,12 +56,25 @@
                     <select aria-label="Camera" id="cameraSelect"></select>
                 </label>
 
+                <label for="microphoneSelect">Microphone
+                    <select aria-label="Microphone" id="microphoneSelect"></select>
+                </label>
+
                 <div role="group">
                     <div role="button" class="primary" tabindex="0" id="cameraButton">
                         Start Camera
                     </div>
                     <div role="button" class="outline primary" tabindex="0" id="shareButton">
                         Share Camera
+                    </div>
+                </div>
+
+                <div role="group">
+                    <div role="button" class="primary" tabindex="0" id="microphoneButton">
+                        Start Microphone
+                    </div>
+                    <div role="button" class="outline primary" tabindex="0" id="shareMicrophoneButton">
+                        Share Microphone
                     </div>
                 </div>
 
@@ -151,14 +164,25 @@
         };
         const room = joinRoom(config, name);
         const [sendMessage, getMessage] = room.makeAction("message");
+        const audioRoom = joinRoom(config, name + "-audio");
+        const [sendAudioMessage, getAudioMessage] = audioRoom.makeAction("message");
 
         let stream;
         let sharingStream;
+        let audioStream;
+        let sharingAudioStream;
 
         room.onPeerJoin((peerId) => {
             console.log("Peer joined:", peerId);
             if (sharingStream) {
                 room.addStream(sharingStream, peerId);
+            }
+        });
+
+        audioRoom.onPeerJoin((peerId) => {
+            console.log("Audio peer joined:", peerId);
+            if (sharingAudioStream) {
+                audioRoom.addStream(sharingAudioStream, peerId);
             }
         });
 
@@ -305,6 +329,125 @@
                 shareCamera();
             } else {
                 stopSharing();
+            }
+        };
+
+        const microphoneSelect = document.getElementById("microphoneSelect");
+        const microphoneButton = document.getElementById("microphoneButton");
+        const shareMicrophoneButton = document.getElementById("shareMicrophoneButton");
+
+        const getAudioDevices = () => {
+            return navigator.mediaDevices.enumerateDevices();
+        };
+
+        const gotAudioDevices = (deviceInfos) => {
+            for (const deviceInfo of deviceInfos) {
+                if (deviceInfo.kind === "audioinput") {
+                    const existingOption = [...microphoneSelect.options].find(
+                        (option) => option.value === deviceInfo.deviceId
+                    );
+                    if (!existingOption) {
+                        const option = document.createElement("option");
+                        option.value = deviceInfo.deviceId;
+                        option.text =
+                            deviceInfo.label || `Microphone ${microphoneSelect.length + 1}`;
+                        microphoneSelect.appendChild(option);
+                    }
+                }
+            }
+        };
+
+        const getAudioStream = () => {
+            if (audioStream) {
+                audioStream.getTracks().forEach((track) => {
+                    track.stop();
+                });
+                audioStream = null;
+            }
+
+            const audioSource = microphoneSelect.value;
+            const constraints = {
+                audio: {
+                    deviceId: audioSource ? { exact: audioSource } : undefined,
+                },
+                video: false,
+            };
+            return navigator.mediaDevices
+                .getUserMedia(constraints)
+                .then(gotAudioStream)
+                .catch(handleError);
+        };
+
+        const gotAudioStream = (mediaStream) => {
+            audioStream = mediaStream;
+
+            microphoneSelect.selectedIndex = [...microphoneSelect.options].findIndex(
+                (option) => option.text === audioStream.getAudioTracks()[0].label
+            );
+
+            microphoneButton.textContent = "Stop Microphone";
+            microphoneButton.classList.replace("primary", "secondary");
+
+            if (sharingAudioStream) {
+                stopSharingAudio();
+                shareMicrophone();
+            }
+        };
+
+        const shareMicrophone = () => {
+            console.log("Starting microphone sharing...");
+
+            if (audioStream) {
+                getAudioStream().then(() => {
+                    sharingAudioStream = audioStream;
+                    shareMicrophoneButton.textContent = "Stop Sharing";
+                    shareMicrophoneButton.classList.replace("primary", "secondary");
+
+                    audioRoom.addStream(sharingAudioStream);
+                });
+            }
+        };
+
+        const stopSharingAudio = () => {
+            console.log("Stopping microphone sharing...");
+
+            sendAudioMessage("stopAudio");
+
+            audioRoom.removeStream(sharingAudioStream);
+            sharingAudioStream = null;
+
+            shareMicrophoneButton.textContent = "Share Microphone";
+            shareMicrophoneButton.classList.replace("secondary", "primary");
+        };
+
+        microphoneSelect.onchange = getAudioStream;
+
+        microphoneButton.onclick = () => {
+            if (!audioStream) {
+                getAudioStream()
+                    .then(getAudioDevices)
+                    .then(gotAudioDevices)
+                    .catch(handleError);
+            } else {
+                if (sharingAudioStream) {
+                    stopSharingAudio();
+                }
+
+                audioStream.getTracks().forEach((track) => {
+                    track.stop();
+                });
+                audioStream = null;
+
+                microphoneButton.textContent = "Start Microphone";
+                microphoneButton.classList.replace("secondary", "primary");
+            }
+        };
+
+        shareMicrophoneButton.onclick = () => {
+            if (!sharingAudioStream) {
+                shareMicrophone();
+            } else {
+                stopSharingAudio();
             }
         };
     </script>

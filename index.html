@@ -29,8 +29,9 @@
 
             const pages = [
                 { id: 'viewer', path: 'viewer.html?' },
-                { id: 'viewerMuted', path: 'viewer.html?muted=yes&'},
+                { id: 'viewerMuted', path: 'viewer.html?muted=yes&' },
                 { id: 'viewerMutedSelfTracked', path: 'viewer-muted-self-tracked.html?' },
+                { id: 'speaker', path: 'speaker.html?' },
                 { id: 'shareScreen', path: 'share-screen.html?' },
                 { id: 'shareCamera', path: 'share-camera.html?' },
                 { id: 'remoteControl', path: 'remote-control.html?' }
@@ -134,6 +135,13 @@
                     <input type="text" id="remoteControlUrl" disabled>
                 </label>
                 <button id="remoteControlCopy">Copy to Clipboard</button>
+
+                <hr />
+
+                <label for="speakerUrl">Speaker:
+                    <input type="text" id="speakerUrl" disabled>
+                </label>
+                <button id="speakerCopy">Copy to Clipboard</button>
             </div>
             <div>
                 <h3>Share Screen</h3>

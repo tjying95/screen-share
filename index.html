@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <title>Screen Share</title>
+    <script>
+        function getBaseURL() {
+            const url = new URL(window.location.href);
+            return `${url.origin}${url.pathname.substring(0, url.pathname.lastIndexOf('/'))}`;
+        }
+
+        function getURLParams() {
+            const params = new URLSearchParams(window.location.search);
+            return {
+                appId: params.get('app') || crypto.randomUUID(),
+                password: params.get('password') || crypto.randomUUID(),
+                roomName: params.get('name') || 'default'
+            };
+        }
+
+        function updateURLs() {
+            const appId = encodeURIComponent(document.getElementById('appId').value);
+            const password = encodeURIComponent(document.getElementById('password').value);
+            const roomName = encodeURIComponent(document.getElementById('roomName').value);
+            const baseURL = getBaseURL();
+
+            const pages = [
+                { id: 'viewer', path: 'viewer.html?' },
+                { id: 'viewerMuted', path: 'viewer.html?muted=yes&'},
+                { id: 'viewerMutedSelfTracked', path: 'viewer-muted-self-tracked.html?' },
+                { id: 'shareScreen', path: 'share-screen.html?' },
+                { id: 'shareCamera', path: 'share-camera.html?' },
+                { id: 'remoteControl', path: 'remote-control.html?' }
+            ];
+
+            pages.forEach(page => {
+                const url = `${baseURL}/${page.path}app=${appId}&password=${password}&name=${roomName}`;
+                document.getElementById(`${page.id}Url`).value = url;
+                document.getElementById(`${page.id}Copy`).onclick = () => copyToClipboard(url, page.id);
+            });
+        }
+
+        function updatePageURL() {
+            const appId = encodeURIComponent(document.getElementById('appId').value);
+            const password = encodeURIComponent(document.getElementById('password').value);
+            const roomName = encodeURIComponent(document.getElementById('roomName').value);
+            const baseURL = getBaseURL();
+
+            const newURL = `${baseURL}/index.html?app=${appId}&password=${password}&name=${roomName}`;
+            document.getElementById('sharePageUrl').value = newURL;
+            document.getElementById('sharePageCopy').onclick = () => copyToClipboard(newURL, 'sharePage');
+        }
+
+        function copyToClipboard(text, id) {
+            navigator.clipboard.writeText(text).then(() => {
+                const button = document.getElementById(`${id}Copy`);
+                button.textContent = 'Copied!';
+                setTimeout(() => button.textContent = 'Copy to Clipboard', 1000);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const params = getURLParams();
+            document.getElementById('appId').value = params.appId;
+            document.getElementById('password').value = params.password;
+            document.getElementById('roomName').value = params.roomName;
+            updateURLs();
+            updatePageURL();
+
+            document.querySelectorAll('input').forEach(input => {
+                input.addEventListener('input', () => {
+                    updateURLs();
+                    updatePageURL();
+                });
+            });
+        });
+    </script>
+</head>
+
+<body>
+    <main class="container">
+        <h1>Screen Share</h1>
+
+        <h3>Share This Page</h3>
+        <label for="sharePageUrl">Share Page:
+            <input type="text" id="sharePageUrl" disabled>
+        </label>
+        <button id="sharePageCopy">Copy to Clipboard</button>
+        <hr />
+
+        <div class="grid">
+            <div>
+                <label for="appId">App ID
+                    <input type="text" id="appId">
+                </label>
+                <label for="password">Password
+                    <input type="text" id="password">
+                </label>
+                <label for="roomName">Room Name
+                    <input type="text" id="roomName" value="default">
+                </label>
+            </div>
+        </div>
+
+        <h2>Generated URLs</h2>
+        <div class="grid">
+            <div>
+                <h3>Viewer</h3>
+                <label for="viewerUrl">Viewer:
+                    <input type="text" id="viewerUrl" disabled>
+                </label>
+                <button id="viewerCopy">Copy to Clipboard</button>
+
+                <hr />
+
+                <label for="viewerMutedUrl">Viewer Muted:
+                    <input type="text" id="viewerMutedUrl" disabled>
+                </label>
+                <button id="viewerMutedCopy">Copy to Clipboard</button>
+
+                <hr />
+
+                <label for="viewerMutedSelfTrackedUrl">Viewer with Tracker:
+                    <input type="text" id="viewerMutedSelfTrackedUrl" disabled>
+                </label>
+                <button id="viewerMutedSelfTrackedCopy">Copy to Clipboard</button>
+
+                <hr />
+
+                <label for="remoteControlUrl">Remote Control for Tracker:
+                    <input type="text" id="remoteControlUrl" disabled>
+                </label>
+                <button id="remoteControlCopy">Copy to Clipboard</button>
+            </div>
+            <div>
+                <h3>Share Screen</h3>
+                <label for="shareScreenUrl">Share Screen:
+                    <input type="text" id="shareScreenUrl" disabled>
+                </label>
+                <button id="shareScreenCopy">Copy to Clipboard</button>
+
+                <hr />
+
+                <h3>Share Camera</h3>
+                <label for="shareCameraUrl">Share Camera:
+                    <input type="text" id="shareCameraUrl" disabled>
+                </label>
+                <button id="shareCameraCopy">Copy to Clipboard</button>
+            </div>
+        </div>
+    </main>
+</body>
+
+</html>

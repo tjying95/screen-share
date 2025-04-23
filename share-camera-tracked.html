@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <title>Share Tracked Camera</title>
+    <style>
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .mirrored {
+            transform: scaleX(-1);
+        }
+
+        #darkenOverlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: black;
+            z-index: 9999;
+        }
+
+        html {
+            background-color: black;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="darkenOverlay"></div>
+    <main class="container">
+        <div class="grid">
+            <div>
+                <label for="roomName">Room name
+                    <input type="text" id="roomName" name="roomName" aria-label="Room Name" disabled />
+                </label>
+
+                <label for="resolutionSelect">Resolution
+                    <select aria-label="Resolution" id="resolutionSelect">
+                        <option value="3840x2160">2160p</option>
+                        <option value="1920x1080" selected>1080p</option>
+                        <option value="1280x720">720p</option>
+                    </select>
+                </label>
+
+                <label for="cameraSelect">Camera
+                    <select aria-label="Camera" id="cameraSelect"></select>
+                </label>
+
+                <div role="group">
+                    <div role="button" class="primary" tabindex="0" id="cameraButton">
+                        Start Camera
+                    </div>
+                    <div role="button" class="outline primary" tabindex="0" id="shareButton">
+                        Share Camera
+                    </div>
+                </div>
+
+                <div role="button" class="contrast" tabindex="0" id="darkenButton">
+                    Darken Screen
+                </div>
+            </div>
+            <div>
+                <video id="preview" autoplay muted playsinline></video>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+
+    <script>
+        const handleVisibilityChange = async () => {
+            if (document.visibilityState === "visible") {
+                console.log("Requesting wake lock...");
+                await requestWakeLock();
+            }
+        };
+
+        const requestWakeLock = async () => {
+            try {
+                const wakeLock = await navigator.wakeLock.request("screen");
+                console.log("Wake lock is active");
+                wakeLock.addEventListener("release", () => {
+                    console.log("Wake lock was released");
+                });
+            } catch (err) {
+                console.error(`${err.name}, ${err.message}`);
+            }
+        };
+
+        document.addEventListener(
+            "visibilitychange",
+            handleVisibilityChange
+        );
+
+        // Request wake lock on load
+        requestWakeLock();
+    </script>
+
+    <script>
+        document.getElementById("darkenButton").onclick = () => {
+            const darkenOverlay = document.getElementById("darkenOverlay");
+            darkenOverlay.style.display = "block";
+
+            if (document.documentElement.requestFullscreen) {
+                document.documentElement.requestFullscreen();
+            } else if (document.documentElement.mozRequestFullScreen) {
+                document.documentElement.mozRequestFullScreen();
+            } else if (document.documentElement.webkitRequestFullscreen) {
+                document.documentElement.webkitRequestFullscreen();
+            } else if (document.documentElement.msRequestFullscreen) {
+                document.documentElement.msRequestFullscreen();
+            }
+        };
+
+        document.getElementById("darkenOverlay").onclick = () => {
+            const darkenOverlay = document.getElementById("darkenOverlay");
+            darkenOverlay.style.display = "none";
+
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.mozCancelFullScreen) {
+                document.mozCancelFullScreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
+        };
+    </script>
+
+    <script type="module">
+        import { joinRoom } from "https://cdn.jsdelivr.net/npm/trystero/src/nostr.js/+esm";
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const app = urlParams.get("app") || "0940d6b0-3531-4140-aa5c-5a0879dab19d";
+        const password = urlParams.get("password") || "2f9659f8-e25e-439f-ad48-2a79658fa10a";
+        const name = urlParams.get("name") || "default";
+        document.getElementById("roomName").value = name;
+
+        const config = {
+            appId: app,
+            password: password,
+        };
+        const room = joinRoom(config, name);
+        const [sendMessage, getMessage] = room.makeAction("message");
+        const [sendPoses, getPoses] = room.makeAction("poses");
+
+        // Load the MoveNet model
+        const detectorConfig = {
+            modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING,
+            enableTracking: true,
+            trackerType: poseDetection.TrackerType.BoundingBox,
+        };
+        const detector = await poseDetection.createDetector(
+            poseDetection.SupportedModels.MoveNet,
+            detectorConfig
+        );
+
+        const preview = document.getElementById("preview");
+        let stream;
+        let sharingStream;
+        let rafId = null;
+        const animateFrame = () => {
+            if (!detector.busy) {
+                detector.busy = true;
+                detector
+                    .estimatePoses(preview, {
+                        maxPoses: 1,
+                        flipHorizontal: false,
+                    })
+                    .then((poses) => {
+                        sendPoses(poses);
+                    })
+                    .finally(() => {
+                        detector.busy = false;
+                    });
+            }
+
+            if (rafId) {
+                rafId = requestAnimationFrame(animateFrame);
+            }
+        };
+
+        room.onPeerJoin((peerId) => {
+            console.log("Peer joined:", peerId);
+            if (sharingStream) {
+                room.addStream(sharingStream, peerId);
+            }
+        });
+
+        const cameraSelect = document.getElementById("cameraSelect");
+        const cameraButton = document.getElementById("cameraButton");
+        const shareButton = document.getElementById("shareButton");
+
+        const getDevices = () => {
+            return navigator.mediaDevices.enumerateDevices();
+        };
+
+        const gotDevices = (deviceInfos) => {
+            for (const deviceInfo of deviceInfos) {
+                if (deviceInfo.kind === "videoinput") {
+                    const existingOption = [...cameraSelect.options].find(
+                        (option) => option.value === deviceInfo.deviceId
+                    );
+                    if (!existingOption) {
+                        const option = document.createElement("option");
+                        option.value = deviceInfo.deviceId;
+                        option.text =
+                            deviceInfo.label ||
+                            `Camera ${cameraSelect.length + 1}`;
+                        cameraSelect.appendChild(option);
+                    }
+                }
+            }
+        };
+
+        const getStream = () => {
+            if (stream) {
+                stream.getTracks().forEach((track) => {
+                    track.stop();
+                });
+                stream = null;
+            }
+
+            const resolutionSelect =
+                document.getElementById("resolutionSelect").value;
+            const width = parseInt(resolutionSelect.split("x")[0]);
+            const height = parseInt(resolutionSelect.split("x")[1]);
+
+            const videoSource = cameraSelect.value;
+            const constraints = {
+                audio: false,
+                video: {
+                    deviceId: videoSource
+                        ? { exact: videoSource }
+                        : undefined,
+                    width: { ideal: width, max: width },
+                    height: { ideal: height, max: height },
+                },
+            };
+            return navigator.mediaDevices
+                .getUserMedia(constraints)
+                .then(gotStream)
+                .catch(handleError);
+        };
+
+        const gotStream = (mediaStream) => {
+            stream = mediaStream;
+
+            cameraSelect.selectedIndex = [
+                ...cameraSelect.options,
+            ].findIndex(
+                (option) => option.text === stream.getVideoTracks()[0].label
+            );
+
+            preview.srcObject = stream;
+            preview.play().catch(handleError);
+
+            // Mirror the preview if the camera is a front camera
+            const track = stream.getVideoTracks()[0];
+            const settings = track.getSettings();
+            if (settings.facingMode === "user") {
+                preview.classList.add("mirrored");
+            } else {
+                preview.classList.remove("mirrored");
+            }
+
+            const cameraButton = document.getElementById("cameraButton");
+            cameraButton.textContent = "Stop Camera";
+            cameraButton.classList.replace("primary", "secondary");
+
+            if (sharingStream) {
+                stopSharing();
+                shareCamera();
+            }
+        };
+
+        const handleError = (error) => {
+            console.error("Error:", error);
+        };
+
+        const shareCamera = () => {
+            console.log("Starting screen sharing...");
+
+            if (stream) {
+                getStream().then(() => {
+                    sharingStream = stream;
+                    shareButton.textContent = "Stop Sharing";
+                    shareButton.classList.replace("primary", "secondary");
+
+                    room.addStream(sharingStream);
+
+                    rafId = requestAnimationFrame(animateFrame);
+                });
+            }
+        };
+
+        const stopSharing = () => {
+            console.log("Stopping screen sharing...");
+
+            cancelAnimationFrame(rafId);
+            rafId = null;
+
+            sendMessage("stop");
+
+            room.removeStream(sharingStream);
+            sharingStream = null;
+
+            shareButton.textContent = "Share Camera";
+            shareButton.classList.replace("secondary", "primary");
+        };
+
+        cameraSelect.onchange = getStream;
+
+        cameraButton.onclick = () => {
+            if (!stream) {
+                getStream()
+                    .then(getDevices)
+                    .then(gotDevices)
+                    .catch(handleError);
+            } else {
+                if (sharingStream) {
+                    stopSharing();
+                }
+
+                stream.getTracks().forEach((track) => {
+                    track.stop();
+                });
+                stream = null;
+
+                cameraButton.textContent = "Start Camera";
+                cameraButton.classList.replace("secondary", "primary");
+            }
+        };
+
+        shareButton.onclick = () => {
+            if (!sharingStream) {
+                shareCamera();
+            } else {
+                stopSharing();
+            }
+        };
+    </script>
+</body>
+
+</html>

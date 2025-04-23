@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Muted Viewer with Tracker</title>
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: black;
+        }
+
+        video {
+            display: none;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <video id="remoteVideo" autoplay muted playsinline></video>
+    <canvas id="outputCanvas"></canvas>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+
+    <script type="module">
+        import { joinRoom } from "https://cdn.jsdelivr.net/npm/trystero/src/nostr.js/+esm";
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const app = urlParams.get("app") || "0940d6b0-3531-4140-aa5c-5a0879dab19d";
+        const password = urlParams.get("password") || "2f9659f8-e25e-439f-ad48-2a79658fa10a";
+        const name = urlParams.get("name") || "default";
+        let zoom = Number(urlParams.get("zoom")) || 2;
+        let speed = Number(urlParams.get("speed")) || 0.1;
+
+        // Load the MoveNet model
+        const detectorConfig = {
+            modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING,
+            enableTracking: true,
+            trackerType: poseDetection.TrackerType.BoundingBox,
+        };
+        const detector = await poseDetection.createDetector(
+            poseDetection.SupportedModels.MoveNet,
+            detectorConfig
+        );
+
+        const remoteVideo = document.getElementById("remoteVideo");
+        const outputCanvas = document.getElementById("outputCanvas");
+
+        const syncFullFrame = (video, canvas) => {
+            const ctx = canvas.getContext("2d");
+            const videoAspectRatio = video.videoWidth / video.videoHeight;
+            const canvasAspectRatio = canvas.width / canvas.height;
+
+            let drawWidth, drawHeight, offsetX, offsetY;
+
+            if (canvasAspectRatio > videoAspectRatio) {
+                drawWidth = canvas.width;
+                drawHeight = drawWidth / videoAspectRatio;
+                offsetX = 0;
+                offsetY = (canvas.height - drawHeight) / 2;
+            } else {
+                drawHeight = canvas.height;
+                drawWidth = videoAspectRatio * drawHeight;
+                offsetX = (canvas.width - drawWidth) / 2;
+                offsetY = 0;
+            }
+
+            ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
+        };
+
+        const syncZoomedFrame = (
+            video,
+            canvas,
+            sx,
+            sy,
+            sWidth,
+            sHeight
+        ) => {
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(
+                video,
+                sx,
+                sy,
+                sWidth,
+                sHeight,
+                0,
+                0,
+                canvas.width,
+                canvas.height
+            );
+        };
+
+        class ZoomHelper {
+            constructor() {
+                this.zoomState = false;
+                this.nextState = false;
+                this.timer = null;
+                this.centerX = null;
+                this.centerY = null;
+                this.validWidth = null;
+                this.jitterThreshold = 10; // Adjust this value to control jitter sensitivity
+                this.subjectToTrack = -1;
+            }
+
+            shouldZoom() {
+                return this.zoomState;
+            }
+
+            trackSubject(subject) {
+                this.subjectToTrack = subject;
+            }
+
+            toggleZoom(state) {
+                if (this.zoomState !== state) {
+                    if (this.nextState !== state) {
+                        this.nextState = state;
+                        if (this.timer) {
+                            clearTimeout(this.timer);
+                            this.timer = null;
+                        }
+                        this.timer = setTimeout(() => {
+                            this.zoomState = this.nextState;
+                            this.timer = null;
+                        }, 500);
+                    }
+                } else {
+                    clearTimeout(this.timer);
+                    this.timer = null;
+                    this.nextState = state;
+                }
+            }
+
+            getCenter() {
+                return {
+                    x: this.centerX,
+                    y: this.centerY,
+                    validWidth: this.validWidth,
+                };
+            }
+
+            computeCenter(poses, validWidth) {
+                if (this.subjectToTrack >= 0) {
+                    this.computeCenterForIndex(this.subjectToTrack, poses, validWidth);
+                } else {
+                    if (poses.length == 1) {
+                        this.computeCenterForIndex(0, poses, validWidth);
+                    } else {
+                        this.toggleZoom(false);
+                    }
+                }
+            }
+
+            computeCenterForIndex(index, poses, validWidth) {
+                if (poses.length > 1) {
+                    poses.sort((a, b) => {
+                        const noseA = a.keypoints.find((kp) => kp.name === "nose");
+                        const noseB = b.keypoints.find((kp) => kp.name === "nose");
+                        return noseA.x - noseB.x;
+                    });
+                }
+
+                if (poses.length > index) {
+                    const keypoints = poses[index].keypoints;
+                    const nose = keypoints.find((kp) => kp.name === "nose");
+                    const leftShoulder = keypoints.find(
+                        (kp) => kp.name === "left_shoulder"
+                    );
+                    const rightShoulder = keypoints.find(
+                        (kp) => kp.name === "right_shoulder"
+                    );
+
+                    if (nose && leftShoulder && rightShoulder) {
+                        const newCenterX =
+                            (leftShoulder.x + rightShoulder.x) / 2;
+                        const newCenterY =
+                            (nose.y + leftShoulder.y + rightShoulder.y) / 3;
+                        if (
+                            this.centerX !== null &&
+                            this.centerY !== null
+                        ) {
+                            const distance = Math.sqrt(
+                                Math.pow(newCenterX - this.centerX, 2) +
+                                Math.pow(newCenterY - this.centerY, 2)
+                            );
+                            if (distance < this.jitterThreshold) {
+                                // Skip updating if the movement is within the jitter threshold.
+                                return;
+                            }
+                        }
+
+                        this.centerX = newCenterX;
+                        this.centerY = newCenterY;
+                        this.validWidth = validWidth;
+
+                        this.toggleZoom(true);
+                    }
+                } else {
+                    this.toggleZoom(false);
+                }
+            }
+        }
+
+        const zoomHelper = new ZoomHelper();
+
+        let rafId = null;
+        let currentX = null;
+        let currentY = null;
+        const animateFrame = () => {
+            outputCanvas.width = window.innerWidth;
+            outputCanvas.height = window.innerHeight;
+
+            if (!detector.busy) {
+                detector.busy = true;
+                detector
+                    .estimatePoses(remoteVideo, {
+                        maxPoses: 1,
+                        flipHorizontal: false,
+                    })
+                    .then((poses) =>
+                        zoomHelper.computeCenter(
+                            poses,
+                            remoteVideo.videoWidth
+                        )
+                    )
+                    .finally(() => {
+                        detector.busy = false;
+                    });
+            }
+
+            if (zoomHelper.shouldZoom()) {
+                const {
+                    x: centerX,
+                    y: centerY,
+                    validWidth: validWidth,
+                } = zoomHelper.getCenter();
+                if (remoteVideo.videoWidth == validWidth) {
+                    if (centerX !== null && centerY !== null) {
+                        const canvasAspectRatio =
+                            outputCanvas.width / outputCanvas.height;
+                        const sourceWidthToCrop =
+                            remoteVideo.videoWidth / zoom;
+                        const sourceHeightToCrop =
+                            sourceWidthToCrop / canvasAspectRatio;
+
+                        const sourceXToCrop =
+                            centerX - sourceWidthToCrop / 2;
+                        const sourceYToCrop =
+                            centerY - sourceHeightToCrop / 2;
+
+                        // Gradually move towards the target crop area
+                        if (currentX === null || currentY === null) {
+                            currentX = sourceXToCrop;
+                            currentY = sourceYToCrop;
+                        }
+
+                        currentX += (sourceXToCrop - currentX) * speed;
+                        currentY += (sourceYToCrop - currentY) * speed;
+
+                        syncZoomedFrame(
+                            remoteVideo,
+                            outputCanvas,
+                            currentX,
+                            currentY,
+                            sourceWidthToCrop,
+                            sourceHeightToCrop
+                        );
+                    }
+                } else {
+                    currentX = null;
+                    currentY = null;
+                    console.log(
+                        "Video resolution changed. Resetting zoom."
+                    );
+                }
+            } else {
+                syncFullFrame(remoteVideo, outputCanvas);
+                currentX = null;
+                currentY = null;
+            }
+
+            if (rafId) {
+                rafId = requestAnimationFrame(animateFrame);
+            }
+        };
+
+        const config = {
+            appId: app,
+            password: password,
+        };
+        const room = joinRoom(config, name);
+        const [sendMessage, getMessage] = room.makeAction("message");
+        const remoteControlRoom = joinRoom(config, `${name}-remote-control`);
+        const [sendRemoteControlMessage, getRemoteControlMessage] = remoteControlRoom.makeAction("message");
+
+        room.onPeerStream((stream, peerId) => {
+            console.log("Stream received from peer:", peerId);
+            remoteVideo.srcObject = stream;
+            remoteVideo.muted = true;
+            remoteVideo.play().then(() => {
+                rafId = requestAnimationFrame(animateFrame);
+            });
+        });
+
+        getMessage((message, peerId) => {
+            if (message === "stop") {
+                console.log("Stopping video...");
+
+                cancelAnimationFrame(rafId);
+                rafId = null;
+
+                remoteVideo.srcObject = null;
+
+                const ctx = outputCanvas.getContext("2d");
+                ctx.clearRect(
+                    0,
+                    0,
+                    outputCanvas.width,
+                    outputCanvas.height
+                );
+            }
+        });
+
+        getRemoteControlMessage((message, peerId) => {
+            if (message.get) {
+                sendRemoteControlMessage({
+                    subject: zoomHelper.subjectToTrack,
+                    zoom,
+                    speed,
+                });
+                return;
+            }
+
+            if (message.subject) {
+                zoomHelper.trackSubject(message.subject);
+            }
+            if (message.zoom) {
+                zoom = message.zoom;
+            }
+            if (message.speed) {
+                speed = message.speed;
+            }
+        });
+    </script>
+</body>
+
+</html>

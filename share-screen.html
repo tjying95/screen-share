@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <title>Share Screen</title>
+    <style>
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="container">
+        <div class="grid">
+            <div>
+                <label for="roomName">Room name
+                    <input type="text" id="roomName" name="roomName" aria-label="Room Name" disabled />
+                </label>
+
+                <label for="resolutionSelect">Resolution
+                    <select aria-label="Resolution" id="resolutionSelect">
+                        <option selected>1080p</option>
+                        <option>720p</option>
+                    </select>
+                </label>
+
+                <label for="rateSelect">Frame rate
+                    <select aria-label="Frame rate" id="rateSelect">
+                        <option selected>24 fps</option>
+                        <option>60 fps</option>
+                    </select>
+                </label>
+
+                <div role="button" class="primary" tabindex="0" id="shareButton">
+                    Share Screen
+                </div>
+            </div>
+            <div>
+                <video id="preview" autoplay muted playsinline></video>
+            </div>
+        </div>
+    </main>
+
+    <script type="module">
+        import { joinRoom } from "https://cdn.jsdelivr.net/npm/trystero/src/nostr.js/+esm";
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const app = urlParams.get("app") || "0940d6b0-3531-4140-aa5c-5a0879dab19d";
+        const password = urlParams.get("password") || "2f9659f8-e25e-439f-ad48-2a79658fa10a";
+        const name = urlParams.get("name") || "default";
+        document.getElementById("roomName").value = name;
+
+        const config = {
+            appId: app,
+            password: password,
+        };
+        const room = joinRoom(config, name);
+        const [sendMessage, getMessage] = room.makeAction("message");
+
+        let stream;
+        const shareButton = document.getElementById("shareButton");
+        shareButton.onclick = () => {
+            if (!stream) {
+                shareScreen();
+            } else {
+                stopSharing();
+            }
+        };
+
+        room.onPeerJoin((peerId) => {
+            console.log("Peer joined:", peerId);
+            if (stream) {
+                room.addStream(stream, peerId);
+            }
+        });
+
+        const shareScreen = () => {
+            console.log("Starting screen sharing...");
+
+            const resolutionSelect = document.getElementById("resolutionSelect").value;
+            let width = resolutionSelect === "1080p" ? 1920 : 1280;
+            let height = resolutionSelect === "1080p" ? 1080 : 720;
+
+            const rateSelect = document.getElementById("rateSelect").value;
+            let frameRate = rateSelect === "24 fps" ? 24 : 60;
+
+            const constraints = {
+                audio: true,
+                video: {
+                    width: { ideal: width, max: width },
+                    height: { ideal: height, max: height },
+                    frameRate: { ideal: frameRate, max: frameRate },
+                },
+            };
+            navigator.mediaDevices
+                .getDisplayMedia(constraints)
+                .then((mediaStream) => {
+                    shareButton.textContent = "Stop Sharing";
+                    shareButton.classList.replace("primary", "secondary");
+
+                    stream = mediaStream;
+                    room.addStream(stream);
+
+                    const preview = document.getElementById("preview");
+                    preview.srcObject = stream;
+
+                    stream
+                        .getVideoTracks()[0]
+                        .addEventListener("ended", () => {
+                            stopSharing();
+                        });
+                })
+                .catch((error) => {
+                    console.error("Error accessing media devices.", error);
+                });
+        };
+
+        const stopSharing = () => {
+            console.log("Stopping screen sharing...");
+
+            sendMessage("stop");
+
+            const preview = document.getElementById("preview");
+            preview.srcObject = null;
+
+            stream.getTracks().forEach((track) => {
+                track.stop();
+            });
+            room.removeStream(stream);
+            stream = null;
+            shareButton.textContent = "Share Screen";
+            shareButton.classList.replace("secondary", "primary");
+        };
+    </script>
+</body>
+
+</html>

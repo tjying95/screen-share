@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <title>Remote Control</title>
+</head>
+
+<body>
+    <main class="container">
+        <div class="grid">
+            <div>
+                <label for="roomName">Room name
+                    <input type="text" id="roomName" name="roomName" aria-label="Room Name" disabled />
+                </label>
+
+                <hr />
+
+                <label for="subject">Tracked Subject (-1 is default behavior)
+                    <input type="number" id="subject" name="subject" aria-label="Subject" value="-1" disabled />
+                </label>
+
+                <div role="group">
+                    <div role="button" class="secondary" tabindex="0" id="decreaseSubjectButton">
+                        Jump Left
+                    </div>
+                    <div role="button" class="primary" tabindex="0" id="subjectButton">
+                        Reset
+                    </div>
+                    <div role="button" class="secondary" tabindex="0" id="increaseSubjectButton">
+                        Jump Right
+                    </div>
+                </div>
+
+                <hr />
+
+                <label for="zoom">Zoom
+                    <input type="number" id="zoom" name="zoom" aria-label="Zoom" value="2" step="0.5" />
+                </label>
+
+                <div role="group">
+                    <div role="button" class="secondary" tabindex="0" id="decreaseZoomButton">
+                        -
+                    </div>
+                    <div role="button" class="primary" tabindex="0" id="zoomButton">
+                        Change Zoom
+                    </div>
+                    <div role="button" class="secondary" tabindex="0" id="increaseZoomButton">
+                        +
+                    </div>
+                </div>
+
+
+                <hr />
+
+                <label for="speed">Speed
+                    <input type="number" id="speed" name="speed" aria-label="Speed" value="0.1" step="0.1" />
+                </label>
+
+                <div role="group">
+                    <div role="button" class="secondary" tabindex="0" id="decreaseSpeedButton">
+                        -
+                    </div>
+                    <div role="button" class="primary" tabindex="0" id="speedButton">
+                        Change Speed
+                    </div>
+                    <div role="button" class="secondary" tabindex="0" id="increaseSpeedButton">
+                        +
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script type="module">
+        import { joinRoom } from "https://cdn.jsdelivr.net/npm/trystero/src/nostr.js/+esm";
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const app = urlParams.get("app") || "0940d6b0-3531-4140-aa5c-5a0879dab19d";
+        const password = urlParams.get("password") || "2f9659f8-e25e-439f-ad48-2a79658fa10a";
+        const name = urlParams.get("name") || "default";
+        document.getElementById("roomName").value = name;
+
+        const config = {
+            appId: app,
+            password: password,
+        };
+        const remoteControlRoom = joinRoom(config, `${name}-remote-control`);
+        const [sendRemoteControlMessage, getRemoteControlMessage] = remoteControlRoom.makeAction("message");
+
+        const subjectButton = document.getElementById("subjectButton");
+        subjectButton.onclick = () => {
+            const subject = -1;
+            document.getElementById("subject").value = subject;
+            sendRemoteControlMessage({ subject });
+        };
+        const decreaseSubjectButton = document.getElementById("decreaseSubjectButton");
+        decreaseSubjectButton.onclick = () => {
+            if (Number(document.getElementById("subject").value) === -1) {
+                return;
+            }
+
+            const subject = Number(document.getElementById("subject").value) - 1;
+            document.getElementById("subject").value = subject;
+            sendRemoteControlMessage({ subject });
+        };
+        const increaseSubjectButton = document.getElementById("increaseSubjectButton");
+        increaseSubjectButton.onclick = () => {
+            const subject = Number(document.getElementById("subject").value) + 1;
+            document.getElementById("subject").value = subject;
+            sendRemoteControlMessage({ subject });
+        };
+
+        const zoomButton = document.getElementById("zoomButton");
+        zoomButton.onclick = () => {
+            const zoom = document.getElementById("zoom").value;
+            sendRemoteControlMessage({ zoom });
+        };
+        const decreaseZoomButton = document.getElementById("decreaseZoomButton");
+        decreaseZoomButton.onclick = () => {
+            if (Number(document.getElementById("zoom").value) === 0.5) {
+                return;
+            }
+
+            const zoom = parseFloat(document.getElementById("zoom").value) - 0.5;
+            document.getElementById("zoom").value = zoom;
+            sendRemoteControlMessage({ zoom });
+        };
+        const increaseZoomButton = document.getElementById("increaseZoomButton");
+        increaseZoomButton.onclick = () => {
+            const zoom = parseFloat(document.getElementById("zoom").value) + 0.5;
+            document.getElementById("zoom").value = zoom;
+            sendRemoteControlMessage({ zoom });
+        };
+
+        const speedButton = document.getElementById("speedButton");
+        speedButton.onclick = () => {
+            const speed = document.getElementById("speed").value;
+            sendRemoteControlMessage({ speed });
+        };
+        const decreaseSpeedButton = document.getElementById("decreaseSpeedButton");
+        decreaseSpeedButton.onclick = () => {
+            if (Number(document.getElementById("speed").value) === 0.1) {
+                return;
+            }
+
+            const speed = parseFloat(document.getElementById("speed").value) - 0.1;
+            document.getElementById("speed").value = speed;
+            sendRemoteControlMessage({ speed });
+        };
+        const increaseSpeedButton = document.getElementById("increaseSpeedButton");
+        increaseSpeedButton.onclick = () => {
+            const speed = parseFloat(document.getElementById("speed").value) + 0.1;
+            document.getElementById("speed").value = speed;
+            sendRemoteControlMessage({ speed });
+        };
+
+        remoteControlRoom.onPeerJoin((peerId) => {
+            console.log("Peer joined:", peerId);
+            sendRemoteControlMessage({ get: true });
+        });
+
+        getRemoteControlMessage((message) => {
+            console.log("Received message:", message);
+            if (message.subject !== undefined) {
+                document.getElementById("subject").value = message.subject;
+            }
+            if (message.zoom !== undefined) {
+                document.getElementById("zoom").value = message.zoom;
+            }
+            if (message.speed !== undefined) {
+                document.getElementById("speed").value = message.speed;
+            }
+        });
+    </script>
+</body>
+
+</html>

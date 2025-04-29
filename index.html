@@ -113,42 +113,80 @@
                 <label for="viewerUrl">Viewer:
                     <input type="text" id="viewerUrl" disabled>
                 </label>
-                <button id="viewerCopy">Copy to Clipboard</button>
+                <div role="group">
+                    <button class="primary" id="viewerCopy">
+                        Copy to Clipboard
+                    </button>
+                    <button class="outline primary" id="viewerOpen"
+                        onclick="window.open(document.getElementById('viewerUrl').value, '_blank')">
+                        Open in New Tab
+                    </button>
+                </div>
 
                 <hr />
 
                 <label for="viewerMutedUrl">Viewer Muted:
                     <input type="text" id="viewerMutedUrl" disabled>
                 </label>
-                <button id="viewerMutedCopy">Copy to Clipboard</button>
+                <div role="group">
+                    <button class="primary" id="viewerMutedCopy">Copy to Clipboard</button>
+                    <button class="outline primary" id="viewerMutedOpen"
+                        onclick="window.open(document.getElementById('viewerMutedUrl').value, '_blank')">
+                        Open in New Tab
+                    </button>
+                </div>
 
                 <hr />
 
                 <label for="viewerMutedSelfTrackedUrl">Viewer with Tracker:
                     <input type="text" id="viewerMutedSelfTrackedUrl" disabled>
                 </label>
-                <button id="viewerMutedSelfTrackedCopy">Copy to Clipboard</button>
+                <div role="group">
+                    <button class="primary" id="viewerMutedSelfTrackedCopy">Copy to Clipboard</button>
+                    <button class="outline primary" id="viewerMutedSelfTrackedOpen"
+                        onclick="window.open(document.getElementById('viewerMutedSelfTrackedUrl').value, '_blank')">
+                        Open in New Tab
+                    </button>
+                </div>
 
                 <hr />
 
                 <label for="remoteControlUrl">Remote Control for Tracker:
                     <input type="text" id="remoteControlUrl" disabled>
                 </label>
-                <button id="remoteControlCopy">Copy to Clipboard</button>
+                <div role="group">
+                    <button class="primary" id="remoteControlCopy">Copy to Clipboard</button>
+                    <button class="outline primary" id="remoteControlOpen"
+                        onclick="window.open(document.getElementById('remoteControlUrl').value, '_blank')">
+                        Open in New Tab
+                    </button>
+                </div>
 
                 <hr />
 
                 <label for="speakerUrl">Speaker:
                     <input type="text" id="speakerUrl" disabled>
                 </label>
-                <button id="speakerCopy">Copy to Clipboard</button>
+                <div role="group">
+                    <button class="primary" id="speakerCopy">Copy to Clipboard</button>
+                    <button class="outline primary" id="speakerOpen"
+                        onclick="window.open(document.getElementById('speakerUrl').value, '_blank')">
+                        Open in New Tab
+                    </button>
+                </div>
             </div>
             <div>
                 <h3>Share Screen</h3>
                 <label for="shareScreenUrl">Share Screen:
                     <input type="text" id="shareScreenUrl" disabled>
                 </label>
-                <button id="shareScreenCopy">Copy to Clipboard</button>
+                <div role="group">
+                    <button class="primary" id="shareScreenCopy">Copy to Clipboard</button>
+                    <button class="outline primary" id="shareScreenOpen"
+                        onclick="window.open(document.getElementById('shareScreenUrl').value, '_blank')">
+                        Open in New Tab
+                    </button>
+                </div>
 
                 <hr />
 
@@ -156,7 +194,13 @@
                 <label for="shareCameraUrl">Share Camera:
                     <input type="text" id="shareCameraUrl" disabled>
                 </label>
-                <button id="shareCameraCopy">Copy to Clipboard</button>
+                <div role="group">
+                    <button class="primary" id="shareCameraCopy">Copy to Clipboard</button>
+                    <button class="outline primary" id="shareCameraOpen"
+                        onclick="window.open(document.getElementById('shareCameraUrl').value, '_blank')">
+                        Open in New Tab
+                    </button>
+                </div>
             </div>
         </div>
     </main>

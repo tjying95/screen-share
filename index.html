@@ -34,6 +34,7 @@
                 { id: 'speaker', path: 'speaker.html?' },
                 { id: 'shareScreen', path: 'share-screen.html?' },
                 { id: 'shareCamera', path: 'share-camera.html?' },
+                { id: 'shareCameraOneStream', path: 'share-camera-one-stream.html?' },
                 { id: 'remoteControl', path: 'remote-control.html?' }
             ];
 
@@ -190,8 +191,8 @@
 
                 <hr />
 
-                <h3>Share Camera</h3>
-                <label for="shareCameraUrl">Share Camera:
+                <h3>Share Camera and Microphone - Multi Streams</h3>
+                <label for="shareCameraUrl">Share Camera and Microphone:
                     <input type="text" id="shareCameraUrl" disabled>
                 </label>
                 <div role="group">
@@ -201,6 +202,21 @@
                         Open in New Tab
                     </button>
                 </div>
+
+                <hr />
+
+                <h3>Share Camera and Microphone - Single Stream</h3>
+                <label for="shareCameraOneStreamUrl">Share Camera and Microphone (Single Stream):
+                    <input type="text" id="shareCameraOneStreamUrl" disabled>
+                </label>
+                <div role="group">
+                    <button class="primary" id="shareCameraOneStreamCopy">Copy to Clipboard</button>
+                    <button class="outline primary" id="shareCameraOneStreamOpen"
+                        onclick="window.open(document.getElementById('shareCameraOneStreamUrl').value, '_blank')">
+                        Open in New Tab
+                    </button>
+                </div>
+                <hr />
             </div>
         </div>
     </main>

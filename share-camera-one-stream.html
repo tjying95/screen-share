@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
-    <title>Share Camera and Microphone - Multi Streams</title>
+    <title>Share Camera and Microphone - One Stream</title>
     <style>
         video {
             width: 100%;
@@ -64,19 +64,17 @@
                     <div role="button" class="primary" tabindex="0" id="cameraButton">
                         Start Camera
                     </div>
-                    <div role="button" class="outline primary" tabindex="0" id="shareButton">
-                        Share Camera
-                    </div>
-                </div>
-
-                <div role="group">
-                    <div role="button" class="primary" tabindex="0" id="microphoneButton">
+                    <div role="button" class="outline primary" tabindex="0" id="microphoneButton">
                         Start Microphone
                     </div>
-                    <div role="button" class="outline primary" tabindex="0" id="shareMicrophoneButton">
-                        Share Microphone
-                    </div>
+
                 </div>
+
+                <div role="button" class="primary" tabindex="0" id="shareButton">
+                    Share
+                </div>
+
+                <hr />
 
                 <div role="button" class="contrast" tabindex="0" id="darkenButton">
                     Darken Screen
@@ -164,25 +162,15 @@
         };
         const room = joinRoom(config, name);
         const [sendMessage, getMessage] = room.makeAction("message");
-        const audioRoom = joinRoom(config, name + "-audio");
-        const [sendAudioMessage, getAudioMessage] = audioRoom.makeAction("message");
 
         let stream;
-        let sharingStream;
         let audioStream;
-        let sharingAudioStream;
+        let sharingStream;
 
         room.onPeerJoin((peerId) => {
             console.log("Peer joined:", peerId);
             if (sharingStream) {
                 room.addStream(sharingStream, peerId);
-            }
-        });
-
-        audioRoom.onPeerJoin((peerId) => {
-            console.log("Audio peer joined:", peerId);
-            if (sharingAudioStream) {
-                audioRoom.addStream(sharingAudioStream, peerId);
             }
         });
 
@@ -267,7 +255,7 @@
 
             if (sharingStream) {
                 stopSharing();
-                shareCamera();
+                mergeStreamsAndShare();
             }
         };
 
@@ -275,29 +263,43 @@
             console.error("Error:", error);
         };
 
-        const shareCamera = () => {
-            console.log("Starting camera sharing...");
+        const mergeStreamsAndShare = () => {
+            const combinedStream = new MediaStream();
 
+            // Add video tracks to the combined stream if available
             if (stream) {
-                getStream().then(() => {
-                    sharingStream = stream;
-                    shareButton.textContent = "Stop Sharing";
-                    shareButton.classList.replace("primary", "secondary");
-
-                    room.addStream(sharingStream);
+                stream.getVideoTracks().forEach((track) => {
+                    combinedStream.addTrack(track);
                 });
+            }
+
+            // Add audio tracks to the combined stream if available
+            if (audioStream) {
+                audioStream.getAudioTracks().forEach((track) => {
+                    combinedStream.addTrack(track);
+                });
+            }
+
+            if (combinedStream.getTracks().length > 0) {
+                sharingStream = combinedStream;
+                shareButton.textContent = "Stop Sharing";
+                shareButton.classList.replace("primary", "secondary");
+
+                room.addStream(sharingStream);
+            } else {
+                console.error("At least one of audio or video streams is required to share.");
             }
         };
 
         const stopSharing = () => {
-            console.log("Stopping camera sharing...");
+            console.log("Stopping sharing...");
 
             sendMessage("stop");
 
             room.removeStream(sharingStream);
             sharingStream = null;
 
-            shareButton.textContent = "Share Camera";
+            shareButton.textContent = "Share";
             shareButton.classList.replace("secondary", "primary");
         };
 
@@ -321,12 +323,14 @@
 
                 cameraButton.textContent = "Start Camera";
                 cameraButton.classList.replace("secondary", "primary");
+
+                mergeStreamsAndShare();
             }
         };
 
         shareButton.onclick = () => {
             if (!sharingStream) {
-                shareCamera();
+                mergeStreamsAndShare();
             } else {
                 stopSharing();
             }
@@ -334,7 +338,6 @@
 
         const microphoneSelect = document.getElementById("microphoneSelect");
         const microphoneButton = document.getElementById("microphoneButton");
-        const shareMicrophoneButton = document.getElementById("shareMicrophoneButton");
 
         const getAudioDevices = () => {
             return navigator.mediaDevices.enumerateDevices();
@@ -388,36 +391,10 @@
             microphoneButton.textContent = "Stop Microphone";
             microphoneButton.classList.replace("primary", "secondary");
 
-            if (sharingAudioStream) {
-                stopSharingAudio();
-                shareMicrophone();
+            if (sharingStream) {
+                stopSharing();
+                mergeStreamsAndShare();
             }
-        };
-
-        const shareMicrophone = () => {
-            console.log("Starting microphone sharing...");
-
-            if (audioStream) {
-                getAudioStream().then(() => {
-                    sharingAudioStream = audioStream;
-                    shareMicrophoneButton.textContent = "Stop Sharing";
-                    shareMicrophoneButton.classList.replace("primary", "secondary");
-
-                    audioRoom.addStream(sharingAudioStream);
-                });
-            }
-        };
-
-        const stopSharingAudio = () => {
-            console.log("Stopping microphone sharing...");
-
-            sendAudioMessage("stopAudio");
-
-            audioRoom.removeStream(sharingAudioStream);
-            sharingAudioStream = null;
-
-            shareMicrophoneButton.textContent = "Share Microphone";
-            shareMicrophoneButton.classList.replace("secondary", "primary");
         };
 
         microphoneSelect.onchange = getAudioStream;
@@ -429,8 +406,8 @@
                     .then(gotAudioDevices)
                     .catch(handleError);
             } else {
-                if (sharingAudioStream) {
-                    stopSharingAudio();
+                if (sharingStream) {
+                    stopSharing();
                 }
 
                 audioStream.getTracks().forEach((track) => {
@@ -440,14 +417,8 @@
 
                 microphoneButton.textContent = "Start Microphone";
                 microphoneButton.classList.replace("secondary", "primary");
-            }
-        };
 
-        shareMicrophoneButton.onclick = () => {
-            if (!sharingAudioStream) {
-                shareMicrophone();
-            } else {
-                stopSharingAudio();
+                mergeStreamsAndShare();
             }
         };
     </script>
